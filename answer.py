@@ -15,18 +15,18 @@ def parse_training_data():
     max_len = 39
 
     # Parse training data
-    tr_path = 'data/training_label.txt'
-    tr_sep = ' +++$+++ '
-    tr_label = []
-    tr_data = []
+    train_data_path = 'data/training_data.txt'
+    train_sep = ' +++$+++ '
+    X_train = []
+    Y_train = []
 
-    for line in open(tr_path,'r'):
-        tmp = line.split(tr_sep,1)
-        tr_label.append(int(tmp[0]))
-        tr_data.append(tmp[1])
+    for line in open(train_data_path,'r', encoding='UTF-8'):
+        tmp = line.split(train_sep,1)
+        Y_train.append(int(tmp[0]))
+        X_train.append(tmp[1])
 
     # Accumalate each word's frequency
-    for sentence in tr_data:
+    for sentence in X_train:
         for word in sentence[:-1].split(' '):
             if word not in word_pop:
                 word_pop[word] = 1
@@ -42,9 +42,14 @@ def parse_training_data():
             word_mapping[k] = 1
     print('Total',word_indexing,'words mapped into index')
 
+    # Save word mapping
+    with open('params/word_mapping.txt', 'w') as txt_file:
+        for key in word_mapping:
+            txt_file.write('%s %s\n' % (key, word_mapping[key]))
+
     # Transform sentences into sequence of index
-    mapped_tr_data = []
-    for sentence in tr_data:
+    mapped_X_train = []
+    for sentence in X_train:
         tmp = []
         for word in sentence[:-1].split(' '):
             tmp.append(word_mapping[word])
@@ -52,23 +57,23 @@ def parse_training_data():
             tmp.extend([0]*(max_len-len(tmp)))
         elif len(tmp) > max_len:
             tmp = tmp[:max_len]
-        mapped_tr_data.append(tmp)
-    tr_data = mapped_tr_data
+        mapped_X_train.append(tmp)
+    X_train = mapped_X_train
 
-    return tr_data, tr_label, word_mapping, word_indexing
+    return X_train, Y_train, word_mapping, word_indexing
 
 def parse_testing_data(word_mapping):
     # Parse testing data
-    tt_path = 'data/testing_data.csv'
-    tt_sep = ','
-    tt_solution = []
-    tt_data = []
+    test_data_path = 'data/testing_data.csv'
+    test_sep = ','
+    Y_test = []
+    X_test = []
     max_len = 39
-    for line in open(tt_path,'r'):
-        tmp = line.split(tt_sep,1)
+    for line in open(test_data_path,'r', encoding='UTF-8'):
+        tmp = line.split(test_sep,1)
         if tmp[0] == 'label':
             continue
-        tt_solution.append(int(tmp[0]))
+        Y_test.append(int(tmp[0]))
         sentence = tmp[1]
         tmp = []
         for word in sentence[:-1].split(' '):
@@ -80,18 +85,18 @@ def parse_testing_data(word_mapping):
             tmp.extend([0]*(max_len-len(tmp)))
         elif len(tmp) > max_len:
             tmp = tmp[:max_len]
-        tt_data.append(tmp)
+        X_test.append(tmp)
 
-    return tt_data, tt_solution
+    return X_test, Y_test
 
-def train(tr_data, tr_label, word_indexing):
+def train(X_train, Y_train, word_indexing):
     # Model
     model = Sequential()
-    tr_data = np.array(tr_data)
-    tr_label = np.array(tr_label)
+    X_train = np.array(X_train)
+    Y_train = np.array(Y_train)
 
     # Set check point to early stop and save the best model
-    check = ModelCheckpoint('SampleSolution.model', monitor='val_acc', verbose=0, save_best_only=True)
+    check = ModelCheckpoint('params/rnn.model', monitor='val_acc', verbose=0, save_best_only=True)
 
     # TODO, 1-a
     # Embed the words
@@ -114,30 +119,23 @@ def train(tr_data, tr_label, word_indexing):
                   metrics=['accuracy'])
     # TODO, 3
     # Start training
-    model.fit(tr_data,tr_label,batch_size=512,epochs=5,
+    model.fit(X_train[:50000],Y_train[:50000],batch_size=512,epochs=1,
               callbacks=[check],validation_split=0.1)
 
-def test(tt_data, tt_solution):
+def infer(X_test, Y_test):
     # Testing
-    model = load_model('SampleSolution.model')
+    model = load_model('params/rnn.model')
 
-    tt_data = np.array(tt_data)
-    tt_pred = model.predict(tt_data,batch_size=512,verbose=1)
+    X_test = np.array(X_test)
+    loss, acc = model.evaluate(X_test[:10000], Y_test[:10000])
 
-    # Calculating accuracy
-    score = 0
-    for idx in range(len(tt_pred)):
-        label = 1 if tt_pred[idx] > .5 else 0
-        if label == tt_solution[idx]:
-            score += 1
-    accuracy = score / len(tt_pred)
-    print('Testing accuracy:', accuracy)
+    print('Accuracy : ' + str(acc))
 
 def main():
-    tr_data, tr_label, word_mapping, word_indexing = parse_training_data()
-    tt_data, tt_solution = parse_testing_data(word_mapping)
-    train(tr_data, tr_label, word_indexing)
-    test(tt_data, tt_solution)
+    X_train, Y_train, word_mapping, word_indexing = parse_training_data()
+    X_test, Y_test = parse_testing_data(word_mapping)
+    train(X_train, Y_train, word_indexing)
+    infer(X_test, Y_test)
 
 if __name__ == '__main__':
     main()
